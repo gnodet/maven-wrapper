@@ -207,11 +207,11 @@ resolve_jdk_url() {
 
   # Make HTTP request to Disco API
   if command -v curl >/dev/null; then
-    _resolve_api_response="$(curl -s -f "$_resolve_disco_api_url" 2>/dev/null)"
+    _resolve_api_response="$(curl --retry 5 --retry-delay 10 -s -f "$_resolve_disco_api_url" 2>/dev/null)"
   elif command -v wget >/dev/null; then
-    _resolve_api_response="$(wget -q -O - "$_resolve_disco_api_url" 2>/dev/null)"
+    _resolve_api_response="$(wget --tries=5 --waitretry=10 --retry-connrefused -q -O - "$_resolve_disco_api_url" 2>/dev/null)"
   elif command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
-    _resolve_api_response="$(busybox wget -q -O - "$_resolve_disco_api_url" 2>/dev/null)"
+    _resolve_api_response="$(busybox wget --tries=5 -q -O - "$_resolve_disco_api_url" 2>/dev/null)"
   else
     echo "ERROR: Cannot resolve JDK URL - no HTTP client available (curl, wget, or busybox wget required)" >&2
     echo "" >&2
@@ -262,11 +262,11 @@ resolve_jdk_url() {
 
   # Follow the redirect to get the actual download URL
   if command -v curl >/dev/null; then
-    _resolve_download_url="$(curl -s -I "$_resolve_redirect_url" 2>/dev/null | grep -i '^location:' | cut -d' ' -f2- | tr -d '\r\n')"
+    _resolve_download_url="$(curl --retry 5 --retry-delay 10 -s -I "$_resolve_redirect_url" 2>/dev/null | grep -i '^location:' | cut -d' ' -f2- | tr -d '\r\n')"
   elif command -v wget >/dev/null; then
-    _resolve_download_url="$(wget -q -S -O /dev/null "$_resolve_redirect_url" 2>&1 | grep -i '^  location:' | cut -d' ' -f4- | tr -d '\r\n')"
+    _resolve_download_url="$(wget --tries=5 --waitretry=10 --retry-connrefused -q -S -O /dev/null "$_resolve_redirect_url" 2>&1 | grep -i '^  location:' | cut -d' ' -f4- | tr -d '\r\n')"
   elif command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
-    _resolve_download_url="$(busybox wget -q -S -O /dev/null "$_resolve_redirect_url" 2>&1 | grep -i '^  location:' | cut -d' ' -f4- | tr -d '\r\n')"
+    _resolve_download_url="$(busybox wget --tries=5 -q -S -O /dev/null "$_resolve_redirect_url" 2>&1 | grep -i '^  location:' | cut -d' ' -f4- | tr -d '\r\n')"
   else
     # Fallback to using the redirect URL directly
     _resolve_download_url="$_resolve_redirect_url"
@@ -388,11 +388,11 @@ get_latest_version_from_disco() {
   verbose "Querying Disco API for JDK versions: $disco_api_url"
 
   if command -v curl >/dev/null; then
-    api_response="$(curl -s -f "$disco_api_url" 2>/dev/null)"
+    api_response="$(curl --retry 5 --retry-delay 10 -s -f "$disco_api_url" 2>/dev/null)"
   elif command -v wget >/dev/null; then
-    api_response="$(wget -q -O - "$disco_api_url" 2>/dev/null)"
+    api_response="$(wget --tries=5 --waitretry=10 --retry-connrefused -q -O - "$disco_api_url" 2>/dev/null)"
   elif command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
-    api_response="$(busybox wget -q -O - "$disco_api_url" 2>/dev/null)"
+    api_response="$(busybox wget --tries=5 -q -O - "$disco_api_url" 2>/dev/null)"
   else
     verbose "No HTTP client (curl/wget/busybox wget) available for Disco API"
     echo "WARNING: Cannot resolve latest JDK version - no HTTP client available" >&2
@@ -570,11 +570,11 @@ install_jdk() {
 
   # Download using available tools
   if [ -z "${MVNW_USERNAME-}" ] && command -v wget >/dev/null; then
-    wget ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$url" -O "$jdk_file" || die "wget: Failed to fetch JDK from $url"
+    wget --tries=5 --waitretry=10 --retry-connrefused ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$url" -O "$jdk_file" || die "wget: Failed to fetch JDK from $url"
   elif [ -z "${MVNW_USERNAME-}" ] && command -v curl >/dev/null; then
-    curl ${__MVNW_QUIET_CURL:+"$__MVNW_QUIET_CURL"} -f -L -o "$jdk_file" "$url" || die "curl: Failed to fetch JDK from $url"
+    curl --retry 5 --retry-delay 10 ${__MVNW_QUIET_CURL:+"$__MVNW_QUIET_CURL"} -f -L -o "$jdk_file" "$url" || die "curl: Failed to fetch JDK from $url"
   elif [ -z "${MVNW_USERNAME-}" ] && command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
-    busybox wget ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$url" -O "$jdk_file" || die "busybox wget: Failed to fetch JDK from $url"
+    busybox wget --tries=5 ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$url" -O "$jdk_file" || die "busybox wget: Failed to fetch JDK from $url"
   else
     die "Cannot download JDK: wget, curl, or busybox wget required"
   fi
@@ -733,13 +733,13 @@ esac
 
 if [ -z "${MVNW_USERNAME-}" ] && command -v wget >/dev/null; then
   verbose "Found wget ... using wget"
-  wget ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$distributionUrl" -O "$TMP_DOWNLOAD_DIR/$distributionUrlName" || die "wget: Failed to fetch $distributionUrl"
+  wget --tries=5 --waitretry=10 --retry-connrefused ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$distributionUrl" -O "$TMP_DOWNLOAD_DIR/$distributionUrlName" || die "wget: Failed to fetch $distributionUrl"
 elif [ -z "${MVNW_USERNAME-}" ] && command -v curl >/dev/null; then
   verbose "Found curl ... using curl"
-  curl ${__MVNW_QUIET_CURL:+"$__MVNW_QUIET_CURL"} -f -L -o "$TMP_DOWNLOAD_DIR/$distributionUrlName" "$distributionUrl" || die "curl: Failed to fetch $distributionUrl"
+  curl --retry 5 --retry-delay 10 ${__MVNW_QUIET_CURL:+"$__MVNW_QUIET_CURL"} -f -L -o "$TMP_DOWNLOAD_DIR/$distributionUrlName" "$distributionUrl" || die "curl: Failed to fetch $distributionUrl"
 elif [ -z "${MVNW_USERNAME-}" ] && command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
   verbose "Found busybox wget ... using busybox wget"
-  busybox wget ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$distributionUrl" -O "$TMP_DOWNLOAD_DIR/$distributionUrlName" || die "busybox wget: Failed to fetch $distributionUrl"
+  busybox wget --tries=5 ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$distributionUrl" -O "$TMP_DOWNLOAD_DIR/$distributionUrlName" || die "busybox wget: Failed to fetch $distributionUrl"
 elif set_java_home; then
   verbose "Falling back to use Java to download"
   javaSource="$TMP_DOWNLOAD_DIR/Downloader.java"
