@@ -29,9 +29,12 @@ wrapperProperties.withInputStream {
 }
 
 // Verify JDK configuration is present in properties
-assert props.jdkDistributionUrl != null
-assert props.jdkDistributionUrl.contains("corretto")
+assert props.jdkVersion == "17"
+assert props.jdkDistribution == "corretto"
 assert props.distributionType == "only-script"
+// When using version-based resolution, jdkDistributionUrl should NOT be set
+// The URL resolution happens at runtime by the wrapper script using the Foojay API
+assert props.jdkDistributionUrl == null
 
 log = new File(basedir, 'build.log').text
 
