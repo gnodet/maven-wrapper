@@ -195,9 +195,13 @@ resolve_jdk_url() {
   fi
 
   # Build Disco API URL for package information (more reliable than direct URI)
-  # Prefer glibc over musl for better compatibility
   # Only get directly downloadable packages to avoid redirect-only entries
-  _resolve_disco_api_url="${DISCO_API_BASE_URL}/packages?distro=${_resolve_distribution}&javafx_bundled=false&archive_type=${_resolve_archive_type}&operating_system=${_resolve_platform}&package_type=jdk&${_resolve_version_param}&architecture=${_resolve_architecture}&latest=available&release_status=ga&lib_c_type=glibc&directly_downloadable=true"
+  # Add lib_c_type=glibc only for Linux to prefer glibc over musl
+  _resolve_lib_c_param=""
+  if [ "${_resolve_platform}" = "linux" ]; then
+    _resolve_lib_c_param="&lib_c_type=glibc"
+  fi
+  _resolve_disco_api_url="${DISCO_API_BASE_URL}/packages?distro=${_resolve_distribution}&javafx_bundled=false&archive_type=${_resolve_archive_type}&operating_system=${_resolve_platform}&package_type=jdk&${_resolve_version_param}&architecture=${_resolve_architecture}&latest=available&release_status=ga${_resolve_lib_c_param}&directly_downloadable=true"
 
   verbose "Resolving JDK download URL from Disco API: $_resolve_disco_api_url"
 
@@ -340,9 +344,13 @@ get_latest_version_from_disco() {
   esac
 
   # Query Disco API for the latest version
-  # Prefer glibc over musl for better compatibility
   # Only get directly downloadable packages to avoid redirect-only entries
-  disco_api_url="${DISCO_API_BASE_URL}/packages?distro=${distribution}&package_type=jdk&jdk_version=${major_version}&operating_system=${platform}&architecture=${architecture}&archive_type=${archive_type}&latest=available&release_status=ga&lib_c_type=glibc&directly_downloadable=true"
+  # Add lib_c_type=glibc only for Linux to prefer glibc over musl
+  lib_c_param=""
+  if [ "${platform}" = "linux" ]; then
+    lib_c_param="&lib_c_type=glibc"
+  fi
+  disco_api_url="${DISCO_API_BASE_URL}/packages?distro=${distribution}&package_type=jdk&jdk_version=${major_version}&operating_system=${platform}&architecture=${architecture}&archive_type=${archive_type}&latest=available&release_status=ga${lib_c_param}&directly_downloadable=true"
 
   verbose "Querying Disco API for JDK versions: $disco_api_url"
 
