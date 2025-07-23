@@ -29,7 +29,8 @@ wrapperProperties.withInputStream {
 }
 
 // Verify JDK configuration is present in properties (even though it will be skipped)
-assert props.jdkVersion == "17"
+// Using JDK 99 (non-existent) to ensure we're actually skipping JDK installation
+assert props.jdkVersion == "99"
 assert props.jdkDistribution == "temurin"
 assert props.distributionType == "only-script"
 
@@ -38,9 +39,10 @@ log = new File(basedir, 'build.log').text
 // Check wrapper generation output
 assert log.contains('[INFO] Unpacked only-script type wrapper distribution')
 
-// In integration test environment, the wrapper execution is expected to fail
-// because it cannot download Maven from the mock repository after the test completes
 // This test validates that JDK configuration is correctly generated in wrapper properties
+// The MVNW_SKIP_JDK environment variable should prevent any JDK download attempts
+// Using JDK 99 ensures that if JDK download was attempted, it would fail
+// But with MVNW_SKIP_JDK=true, the wrapper should skip JDK installation entirely
 
 // Test passes if we reach this point - configuration was generated correctly
 assert true

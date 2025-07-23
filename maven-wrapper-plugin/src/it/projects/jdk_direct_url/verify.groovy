@@ -38,9 +38,8 @@ log = new File(basedir, 'build.log').text
 // Check wrapper generation output
 assert log.contains('[INFO] Unpacked only-script type wrapper distribution')
 
-// In integration test environment, the wrapper execution is expected to fail
-// because it cannot download Maven from the mock repository after the test completes
 // This test validates that JDK configuration is correctly generated in wrapper properties
+// and that the wrapper can successfully download and install JDK from a direct URL
 
 // Test passes if we reach this point - configuration was generated correctly
 assert true

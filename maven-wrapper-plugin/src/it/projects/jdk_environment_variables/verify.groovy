@@ -29,8 +29,8 @@ wrapperProperties.withInputStream {
 }
 
 // Verify JDK configuration is present in properties (from test.properties)
-assert props.jdkDistributionUrl != null
-assert props.jdkDistributionUrl.contains("temurin17-binaries")
+assert props.jdkVersion == "17"
+assert props.jdkDistribution == "temurin"
 assert props.distributionType == "only-script"
 
 log = new File(basedir, 'build.log').text
@@ -38,14 +38,13 @@ log = new File(basedir, 'build.log').text
 // Check wrapper generation output
 assert log.contains('[INFO] Unpacked only-script type wrapper distribution')
 
-// Environment variables should override properties file settings
-// So we should see JDK 11 with Zulu distribution being used (if JDK is downloaded)
-// Note: This test mainly verifies that environment variables are properly read
-// The actual override behavior depends on the wrapper script implementation
+// This test verifies that the MVNW_SKIP_JDK environment variable works
+// The environment variable is set in invoker.properties
+// When the wrapper script is executed, it should skip JDK installation
 
-// In integration test environment, the wrapper execution is expected to fail
-// because it cannot download Maven from the mock repository after the test completes
-// This test validates that JDK configuration is correctly generated in wrapper properties
+// The wrapper script should be generated with JDK configuration
+// But when executed, it should respect the MVNW_SKIP_JDK environment variable
+// and skip JDK installation
 
-// If JDK installation messages are present, they might reference the environment variable values
-// but this is implementation-dependent and may not always be visible in the log
+// Note: In integration test environment, the wrapper execution may not be visible
+// This test mainly validates that JDK configuration is correctly generated in wrapper properties

@@ -29,10 +29,10 @@ wrapperProperties.withInputStream {
 }
 
 // Verify JDK configuration is present in properties
-assert props.jdkDistributionUrl != null
-assert props.jdkDistributionUrl.contains("temurin21-binaries")
-assert props.toolchainJdkDistributionUrl != null
-assert props.toolchainJdkDistributionUrl.contains("corretto")
+assert props.jdkVersion == "21"
+assert props.jdkDistribution == "temurin"
+assert props.toolchainJdkVersion == "17"
+assert props.toolchainJdkDistribution == "corretto"
 assert props.distributionType == "only-script"
 
 log = new File(basedir, 'build.log').text
@@ -40,9 +40,9 @@ log = new File(basedir, 'build.log').text
 // Check wrapper generation output
 assert log.contains('[INFO] Unpacked only-script type wrapper distribution')
 
-// In integration test environment, the wrapper execution is expected to fail
-// because it cannot download Maven from the mock repository after the test completes
-// This test validates that JDK configuration is correctly generated in wrapper properties
+// This test validates that toolchain JDK configuration is correctly generated in wrapper properties
+// The wrapper should be able to download both the main JDK (21) and toolchain JDK (17)
+// Note: Actual toolchains.xml update would require additional toolchain plugin integration
 
 // Test passes if we reach this point - configuration was generated correctly
 assert true
