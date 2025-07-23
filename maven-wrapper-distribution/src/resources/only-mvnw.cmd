@@ -299,12 +299,23 @@ function Install-JDK {
           Write-Error "  jdkDistribution=zulu"
           Write-Error ""
           Write-Error "Alternatively, specify an exact JDK URL with jdkDistributionUrl."
+          Write-Error "Or set MVNW_SKIP_JDK=true to use system JDK."
           return
           }
         } catch {
           # Network or API error
           Write-Error "Failed to resolve JDK version $Version from Disco API: $($_.Exception.Message)"
-          Write-Error "Please check your internet connection or specify an exact JDK version with jdkDistributionUrl."
+          Write-Error ""
+          Write-Error "This could be due to:"
+          Write-Error "1. Network connectivity issues"
+          Write-Error "2. Disco API being temporarily unavailable"
+          Write-Error "3. Invalid JDK version or distribution combination"
+          Write-Error ""
+          Write-Error "To fix this issue:"
+          Write-Error "1. Check your internet connection"
+          Write-Error "2. Use a direct JDK URL with jdkDistributionUrl in maven-wrapper.properties"
+          Write-Error "3. Set MVNW_SKIP_JDK=true to use system JDK"
+          Write-Error "4. Try a different JDK distribution (temurin, corretto, zulu, etc.)"
           return
         }
       }

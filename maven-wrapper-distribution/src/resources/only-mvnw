@@ -213,10 +213,30 @@ resolve_jdk_url() {
   elif command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
     _resolve_api_response="$(busybox wget -q -O - "$_resolve_disco_api_url" 2>/dev/null)"
   else
+    echo "ERROR: Cannot resolve JDK URL - no HTTP client available (curl, wget, or busybox wget required)" >&2
+    echo "" >&2
+    echo "To fix this issue:" >&2
+    echo "1. Install curl or wget on your system" >&2
+    echo "2. Use a direct JDK URL with jdkDistributionUrl in maven-wrapper.properties" >&2
+    echo "3. Set MVNW_SKIP_JDK=true to use system JDK" >&2
     die "Cannot resolve JDK URL: curl, wget, or busybox wget required"
   fi
 
   if [ -z "$_resolve_api_response" ]; then
+    echo "ERROR: Failed to get JDK package information from Disco API" >&2
+    echo "Version: $_resolved_version, Distribution: $_resolve_distribution" >&2
+    echo "Platform: $_resolve_platform $_resolve_architecture" >&2
+    echo "" >&2
+    echo "This could be due to:" >&2
+    echo "1. Network connectivity issues" >&2
+    echo "2. Disco API being temporarily unavailable" >&2
+    echo "3. Invalid JDK version or distribution combination" >&2
+    echo "" >&2
+    echo "To fix this issue:" >&2
+    echo "1. Check your internet connection" >&2
+    echo "2. Use a direct JDK URL with jdkDistributionUrl in maven-wrapper.properties" >&2
+    echo "3. Set MVNW_SKIP_JDK=true to use system JDK" >&2
+    echo "4. Try a different JDK distribution (temurin, corretto, zulu, etc.)" >&2
     die "Failed to get JDK package information for version $_resolved_version, distribution $_resolve_distribution on $_resolve_platform $_resolve_architecture"
   fi
 
@@ -224,6 +244,19 @@ resolve_jdk_url() {
   _resolve_redirect_url="$(echo "$_resolve_api_response" | sed -n 's/.*"pkg_download_redirect":"\([^"]*\)".*/\1/p' | head -1)"
 
   if [ -z "$_resolve_redirect_url" ]; then
+    echo "ERROR: Failed to extract JDK download URL from Disco API response" >&2
+    echo "Version: $_resolved_version, Distribution: $_resolve_distribution" >&2
+    echo "Platform: $_resolve_platform $_resolve_architecture" >&2
+    echo "" >&2
+    echo "This could be due to:" >&2
+    echo "1. Invalid API response format" >&2
+    echo "2. No matching JDK package available" >&2
+    echo "3. Disco API changes" >&2
+    echo "" >&2
+    echo "To fix this issue:" >&2
+    echo "1. Use a direct JDK URL with jdkDistributionUrl in maven-wrapper.properties" >&2
+    echo "2. Set MVNW_SKIP_JDK=true to use system JDK" >&2
+    echo "3. Try a different JDK distribution or version" >&2
     die "Failed to extract JDK download URL for version $_resolved_version, distribution $_resolve_distribution on $_resolve_platform $_resolve_architecture"
   fi
 
@@ -362,11 +395,17 @@ get_latest_version_from_disco() {
     api_response="$(busybox wget -q -O - "$disco_api_url" 2>/dev/null)"
   else
     verbose "No HTTP client (curl/wget/busybox wget) available for Disco API"
+    echo "WARNING: Cannot resolve latest JDK version - no HTTP client available" >&2
+    echo "Using specified version as-is: $major_version" >&2
+    echo "To fix this, install curl or wget, or use a specific JDK version" >&2
     return 1 # No HTTP client available
   fi
 
   if [ -z "$api_response" ]; then
-    verbose "Disco API returned empty response"
+    verbose "Disco API returned empty response for version resolution"
+    echo "WARNING: Cannot resolve latest JDK version from Disco API" >&2
+    echo "Using specified version as-is: $major_version" >&2
+    echo "This could be due to network issues or API unavailability" >&2
     return 1 # API call failed
   fi
 
