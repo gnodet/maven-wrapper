@@ -132,7 +132,7 @@ The Maven Wrapper supports 34+ JDK distributions through the Foojay Disco API us
 
 | Distribution | Description | Recommended Use |
 |-------------|-------------|-----------------|
-| `temurin` | Eclipse Adoptium (recommended) | General purpose, excellent support |
+| `temurin` | Eclipse Adoptium (default) | General purpose, excellent support |
 | `corretto` | Amazon Corretto | AWS environments, enterprise |
 | `zulu` | Azul Zulu | Commercial support available |
 | `liberica` | BellSoft Liberica | Lightweight, embedded systems |
