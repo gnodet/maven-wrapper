@@ -420,13 +420,12 @@ resolve_jdk_url() {
 
     # Check if it's a "no client" error
     if [ "$_resolve_http_status" = "no_client" ]; then
-      echo "ERROR: Cannot resolve JDK URL - no HTTP client available (curl, wget, or busybox wget required)" >&2
+      echo "ERROR: Cannot download JDK - no HTTP client available (curl, wget, or busybox wget required)" >&2
       echo "" >&2
       echo "To fix this issue:" >&2
       echo "1. Install curl or wget on your system" >&2
-      echo "2. Use a direct JDK URL with jdkDistributionUrl in maven-wrapper.properties" >&2
-      echo "3. Set MVNW_SKIP_JDK=true to use system JDK" >&2
-      die "Cannot resolve JDK URL: curl, wget, or busybox wget required"
+      echo "2. Set MVNW_SKIP_JDK=true to use system JDK instead" >&2
+      die "Cannot download JDK: curl, wget, or busybox wget required"
     fi
   fi
 
@@ -629,7 +628,7 @@ get_latest_version_from_disco() {
       verbose "No HTTP client (curl/wget/busybox wget) available for Disco API"
       echo "WARNING: Cannot resolve latest JDK version - no HTTP client available" >&2
       echo "Using specified version as-is: $major_version" >&2
-      echo "To fix this, install curl or wget, or use a specific JDK version" >&2
+      echo "To fix this, install curl or wget, or set MVNW_SKIP_JDK=true to use system JDK" >&2
       return 1 # No HTTP client available
     fi
   fi
