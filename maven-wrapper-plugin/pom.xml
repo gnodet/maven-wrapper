@@ -155,7 +155,7 @@ under the License.
                 <goal>exec:exec</goal>
               </goals>
               <projectsDirectory>src/it/projects</projectsDirectory>
-              <debug>false</debug>
+              <debug>true</debug>
               <cloneProjectsTo>${project.build.directory}/it</cloneProjectsTo>
               <preBuildHookScript>setup</preBuildHookScript>
               <postBuildHookScript>verify</postBuildHookScript>
@@ -171,6 +171,9 @@ under the License.
               <filterProperties>
                 <mrm.repository.url>${mrm.repository.url}</mrm.repository.url>
               </filterProperties>
+              <environmentVariables>
+                <MVNW_VERBOSE>true</MVNW_VERBOSE>
+              </environmentVariables>
               <extraArtifacts>
                 <artifact>org.apache.maven.wrapper:maven-wrapper-distribution:${project.version}:zip:bin</artifact>
                 <artifact>org.apache.maven.wrapper:maven-wrapper-distribution:${project.version}:zip:only-script</artifact>

@@ -420,11 +420,13 @@ resolve_jdk_url() {
   _resolve_disco_api_url="${DISCO_API_BASE_URL}/packages?distro=${_resolve_distribution}&javafx_bundled=false&archive_type=${_resolve_archive_type}&operating_system=${_resolve_platform}&package_type=jdk&${_resolve_version_param}&architecture=${_resolve_architecture}&latest=available&release_status=ga${_resolve_lib_c_param}&directly_downloadable=true&include_versions=false"
 
   verbose "Resolving JDK download URL from Disco API: $_resolve_disco_api_url"
+  echo "DEBUG: Disco API call - URL: $_resolve_disco_api_url" >&2
 
   # Make HTTP request to Disco API with retry logic
   _resolve_http_status=""
-  _resolve_api_response="$(retry_http_request "$_resolve_disco_api_url" 3 2 2>/dev/null)"
+  _resolve_api_response="$(retry_http_request "$_resolve_disco_api_url" 3 2 2>&1)"
   _resolve_retry_result=$?
+  echo "DEBUG: Disco API response code: $_resolve_retry_result" >&2
 
   if [ $_resolve_retry_result -ne 0 ]; then
     # Extract HTTP status from stderr if available
@@ -625,11 +627,13 @@ get_latest_version_from_disco() {
   disco_api_url="${DISCO_API_BASE_URL}/packages?distro=${distribution}&package_type=jdk&jdk_version=${major_version}&operating_system=${platform}&architecture=${architecture}&archive_type=${archive_type}&latest=available&release_status=ga${lib_c_param}&directly_downloadable=true&include_versions=false"
 
   verbose "Querying Disco API for JDK versions: $disco_api_url"
+  echo "DEBUG: Disco API call - URL: $disco_api_url" >&2
 
   # Make HTTP request with retry logic for 5xx errors
   http_status=""
-  api_response="$(retry_http_request "$disco_api_url" 3 2 2>/dev/null)"
+  api_response="$(retry_http_request "$disco_api_url" 3 2 2>&1)"
   retry_result=$?
+  echo "DEBUG: Disco API response code: $retry_result" >&2
 
   if [ $retry_result -ne 0 ]; then
     # Extract HTTP status from stderr if available
