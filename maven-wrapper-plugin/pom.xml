@@ -173,6 +173,7 @@ under the License.
               </filterProperties>
               <environmentVariables>
                 <MVNW_VERBOSE>true</MVNW_VERBOSE>
+                <MVNW_SKIP_JDK>true</MVNW_SKIP_JDK>
               </environmentVariables>
               <extraArtifacts>
                 <artifact>org.apache.maven.wrapper:maven-wrapper-distribution:${project.version}:zip:bin</artifact>
