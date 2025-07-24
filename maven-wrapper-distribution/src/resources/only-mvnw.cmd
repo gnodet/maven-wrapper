@@ -26,6 +26,18 @@
 @REM   MVNW_USERNAME/MVNW_PASSWORD - user and password for downloading maven
 @REM   MVNW_VERBOSE - true: enable verbose log; others: silence the output
 @REM   MVNW_SKIP_JDK - true: skip JDK installation and management (use system JDK)
+@REM
+@REM JDK Management ENV vars (override maven-wrapper.properties)
+@REM   MVNW_JDK_VERSION - JDK version to download and use (e.g., 17, 21, 17.0.14)
+@REM   MVNW_JDK_DISTRIBUTION - JDK distribution name (e.g., temurin, corretto, zulu)
+@REM   MVNW_JDK_DISTRIBUTION_URL - Direct URL to JDK archive (overrides version/distribution)
+@REM   MVNW_JDK_SHA256_SUM - SHA-256 checksum for JDK archive verification
+@REM   MVNW_JDK_UPDATE_POLICY - Update policy (never, daily, weekly, monthly, always, interval:X)
+@REM   MVNW_ALWAYS_DOWNLOAD_JDK - Force re-download of JDK (true/false)
+@REM   MVNW_TOOLCHAIN_JDK_VERSION - Toolchain JDK version (e.g., 11, 8)
+@REM   MVNW_TOOLCHAIN_JDK_DISTRIBUTION - Toolchain JDK distribution name
+@REM   MVNW_TOOLCHAIN_JDK_DISTRIBUTION_URL - Direct URL to toolchain JDK archive
+@REM   MVNW_TOOLCHAIN_JDK_SHA256_SUM - SHA-256 checksum for toolchain JDK archive
 @REM ----------------------------------------------------------------------------
 
 @IF "%__MVNW_ARG0_NAME__%"=="" (SET __MVNW_ARG0_NAME__=%~nx0)
@@ -63,6 +75,7 @@ $jdkVersion = $wrapperProperties.jdkVersion
 $jdkDistribution = $wrapperProperties.jdkDistribution
 $jdkDistributionUrl = $wrapperProperties.jdkDistributionUrl
 $jdkSha256Sum = $wrapperProperties.jdkSha256Sum
+$jdkUpdatePolicy = $wrapperProperties.jdkUpdatePolicy
 $alwaysDownloadJdk = $wrapperProperties.alwaysDownloadJdk
 $toolchainJdkVersion = $wrapperProperties.toolchainJdkVersion
 $toolchainJdkDistribution = $wrapperProperties.toolchainJdkDistribution
@@ -71,6 +84,18 @@ $toolchainJdkSha256Sum = $wrapperProperties.toolchainJdkSha256Sum
 
 # Disco API constants
 $DISCO_API_BASE_URL = "https://api.foojay.io/disco/v3.0"
+
+# Override JDK properties with environment variables if set
+if ($env:MVNW_JDK_VERSION) { $jdkVersion = $env:MVNW_JDK_VERSION }
+if ($env:MVNW_JDK_DISTRIBUTION) { $jdkDistribution = $env:MVNW_JDK_DISTRIBUTION }
+if ($env:MVNW_JDK_DISTRIBUTION_URL) { $jdkDistributionUrl = $env:MVNW_JDK_DISTRIBUTION_URL }
+if ($env:MVNW_JDK_SHA256_SUM) { $jdkSha256Sum = $env:MVNW_JDK_SHA256_SUM }
+if ($env:MVNW_JDK_UPDATE_POLICY) { $jdkUpdatePolicy = $env:MVNW_JDK_UPDATE_POLICY }
+if ($env:MVNW_ALWAYS_DOWNLOAD_JDK) { $alwaysDownloadJdk = $env:MVNW_ALWAYS_DOWNLOAD_JDK }
+if ($env:MVNW_TOOLCHAIN_JDK_VERSION) { $toolchainJdkVersion = $env:MVNW_TOOLCHAIN_JDK_VERSION }
+if ($env:MVNW_TOOLCHAIN_JDK_DISTRIBUTION) { $toolchainJdkDistribution = $env:MVNW_TOOLCHAIN_JDK_DISTRIBUTION }
+if ($env:MVNW_TOOLCHAIN_JDK_DISTRIBUTION_URL) { $toolchainJdkDistributionUrl = $env:MVNW_TOOLCHAIN_JDK_DISTRIBUTION_URL }
+if ($env:MVNW_TOOLCHAIN_JDK_SHA256_SUM) { $toolchainJdkSha256Sum = $env:MVNW_TOOLCHAIN_JDK_SHA256_SUM }
 
 # Set default distribution if not specified
 if (-not $jdkDistribution) { $jdkDistribution = "temurin" }
@@ -183,7 +208,7 @@ function Install-JDK {
       Write-Error "ERROR: Unknown JDK distribution '$Distribution'."
       Write-Error ""
       Write-Error "Available JDK distributions:"
-      Write-Error "  - temurin (Eclipse Adoptium - recommended)"
+      Write-Error "  - temurin (Eclipse Adoptium - default)"
       Write-Error "  - corretto (Amazon)"
       Write-Error "  - zulu (Azul)"
       Write-Error "  - liberica (BellSoft)"
@@ -278,7 +303,7 @@ function Install-JDK {
           Write-Error "ERROR: JDK $Version is not available from distribution '$Distribution'."
           Write-Error ""
           Write-Error "Available JDK distributions:"
-          Write-Error "  - temurin (Eclipse Adoptium - recommended)"
+          Write-Error "  - temurin (Eclipse Adoptium - default)"
           Write-Error "  - corretto (Amazon)"
           Write-Error "  - zulu (Azul)"
           Write-Error "  - liberica (BellSoft)"

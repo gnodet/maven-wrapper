@@ -28,6 +28,19 @@
 #   MVNW_USERNAME/MVNW_PASSWORD - user and password for downloading maven
 #   MVNW_VERBOSE - true: enable verbose log; debug: trace the mvnw script; others: silence the output
 #   MVNW_SKIP_JDK - true: skip JDK installation and management (use system JDK)
+#
+# JDK Management ENV vars (override maven-wrapper.properties)
+# -----------------------------------------------------------
+#   MVNW_JDK_VERSION - JDK version to download and use (e.g., 17, 21, 17.0.14)
+#   MVNW_JDK_DISTRIBUTION - JDK distribution name (e.g., temurin, corretto, zulu)
+#   MVNW_JDK_DISTRIBUTION_URL - Direct URL to JDK archive (overrides version/distribution)
+#   MVNW_JDK_SHA256_SUM - SHA-256 checksum for JDK archive verification
+#   MVNW_JDK_UPDATE_POLICY - Update policy (never, daily, weekly, monthly, always, interval:X)
+#   MVNW_ALWAYS_DOWNLOAD_JDK - Force re-download of JDK (true/false)
+#   MVNW_TOOLCHAIN_JDK_VERSION - Toolchain JDK version (e.g., 11, 8)
+#   MVNW_TOOLCHAIN_JDK_DISTRIBUTION - Toolchain JDK distribution name
+#   MVNW_TOOLCHAIN_JDK_DISTRIBUTION_URL - Direct URL to toolchain JDK archive
+#   MVNW_TOOLCHAIN_JDK_SHA256_SUM - SHA-256 checksum for toolchain JDK archive
 # ----------------------------------------------------------------------------
 
 set -euf
@@ -131,7 +144,7 @@ validate_distribution() {
 
 show_available_distributions() {
   echo "Available JDK distributions:" >&2
-  echo "  - temurin (Eclipse Adoptium - recommended)" >&2
+  echo "  - temurin (Eclipse Adoptium - default)" >&2
   echo "  - corretto (Amazon)" >&2
   echo "  - zulu (Azul)" >&2
   echo "  - liberica (BellSoft)" >&2
@@ -459,6 +472,7 @@ jdkVersion=""
 jdkDistribution=""
 jdkDistributionUrl=""
 jdkSha256Sum=""
+jdkUpdatePolicy=""
 alwaysDownloadJdk=""
 toolchainJdkVersion=""
 toolchainJdkDistribution=""
@@ -478,6 +492,7 @@ while IFS="=" read -r key value; do
   jdkDistribution) jdkDistribution=$(trim "${value-}") ;;
   jdkDistributionUrl) jdkDistributionUrl=$(trim "${value-}") ;;
   jdkSha256Sum) jdkSha256Sum=$(trim "${value-}") ;;
+  jdkUpdatePolicy) jdkUpdatePolicy=$(trim "${value-}") ;;
   alwaysDownloadJdk) alwaysDownloadJdk=$(trim "${value-}") ;;
   toolchainJdkVersion) toolchainJdkVersion=$(trim "${value-}") ;;
   toolchainJdkDistribution) toolchainJdkDistribution=$(trim "${value-}") ;;
@@ -486,6 +501,18 @@ while IFS="=" read -r key value; do
   esac
 done <"$scriptDir/.mvn/wrapper/maven-wrapper.properties"
 [ -n "${distributionUrl-}" ] || die "cannot read distributionUrl property in $scriptDir/.mvn/wrapper/maven-wrapper.properties"
+
+# Override JDK properties with environment variables if set
+[ -z "${MVNW_JDK_VERSION-}" ] || jdkVersion="$MVNW_JDK_VERSION"
+[ -z "${MVNW_JDK_DISTRIBUTION-}" ] || jdkDistribution="$MVNW_JDK_DISTRIBUTION"
+[ -z "${MVNW_JDK_DISTRIBUTION_URL-}" ] || jdkDistributionUrl="$MVNW_JDK_DISTRIBUTION_URL"
+[ -z "${MVNW_JDK_SHA256_SUM-}" ] || jdkSha256Sum="$MVNW_JDK_SHA256_SUM"
+[ -z "${MVNW_JDK_UPDATE_POLICY-}" ] || jdkUpdatePolicy="$MVNW_JDK_UPDATE_POLICY"
+[ -z "${MVNW_ALWAYS_DOWNLOAD_JDK-}" ] || alwaysDownloadJdk="$MVNW_ALWAYS_DOWNLOAD_JDK"
+[ -z "${MVNW_TOOLCHAIN_JDK_VERSION-}" ] || toolchainJdkVersion="$MVNW_TOOLCHAIN_JDK_VERSION"
+[ -z "${MVNW_TOOLCHAIN_JDK_DISTRIBUTION-}" ] || toolchainJdkDistribution="$MVNW_TOOLCHAIN_JDK_DISTRIBUTION"
+[ -z "${MVNW_TOOLCHAIN_JDK_DISTRIBUTION_URL-}" ] || toolchainJdkDistributionUrl="$MVNW_TOOLCHAIN_JDK_DISTRIBUTION_URL"
+[ -z "${MVNW_TOOLCHAIN_JDK_SHA256_SUM-}" ] || toolchainJdkSha256Sum="$MVNW_TOOLCHAIN_JDK_SHA256_SUM"
 
 case "${distributionUrl##*/}" in
 maven-mvnd-*bin.*)

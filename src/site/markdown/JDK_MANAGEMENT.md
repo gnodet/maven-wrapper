@@ -17,13 +17,15 @@
 
 # JDK Management in Maven Wrapper
 
-This document describes the enhanced JDK management capabilities added to Maven Wrapper for the `only-script` distribution type, allowing projects to automatically download and manage JDK installations.
+This document describes the enhanced JDK management capabilities added to Maven Wrapper for the `only-script` distribution type, allowing projects to automatically download and manage JDK installations using the [Foojay Disco API](https://api.foojay.io/disco/v3.0).
+
+**Important**: JDK management is **only available for the `only-script` distribution type**. This design choice avoids the chicken-and-egg problem where Java is needed to download Java.
 
 ## Overview
 
 The Maven Wrapper `only-script` distribution now supports:
 
-- 🚀 **Automatic JDK download and installation**
+- 🚀 **Automatic JDK download and installation** via Foojay Disco API
 - 📦 **JDK version management via maven-wrapper.properties**
 - 🔧 **Toolchain JDK support for multi-JDK builds**
 - 🔒 **SHA-256 checksum verification for security**
@@ -31,9 +33,7 @@ The Maven Wrapper `only-script` distribution now supports:
 - ⚙️ **Environment variable configuration**
 - ↩️ **Backward compatibility with existing configurations**
 
-## Distribution Type Support
-
-**Important**: JDK management is **only available for the `only-script` distribution type**. This design choice avoids the chicken-and-egg problem where Java is needed to download Java.
+## Getting Started
 
 ```bash
 # Generate wrapper with JDK management support
@@ -44,6 +44,40 @@ The `only-script` distribution uses shell scripts (Unix) and PowerShell (Windows
 
 ## Configuration
 
+JDK settings can be configured in two ways:
+1. **Properties file**: Add settings to `.mvn/wrapper/maven-wrapper.properties`
+2. **Environment variables**: Override properties with `MVNW_JDK_*` prefixed environment variables
+
+### Environment Variables
+
+Environment variables take precedence over properties file settings:
+
+```bash
+# Basic JDK configuration
+export MVNW_JDK_VERSION=17                    # Override jdkVersion
+export MVNW_JDK_DISTRIBUTION=corretto         # Override jdkDistribution
+export MVNW_JDK_DISTRIBUTION_URL=https://...  # Override jdkDistributionUrl
+export MVNW_JDK_SHA256_SUM=abc123...          # Override jdkSha256Sum
+export MVNW_JDK_UPDATE_POLICY=weekly          # Override jdkUpdatePolicy
+export MVNW_ALWAYS_DOWNLOAD_JDK=true          # Override alwaysDownloadJdk
+
+# Toolchain JDK configuration
+export MVNW_TOOLCHAIN_JDK_VERSION=11          # Override toolchainJdkVersion
+export MVNW_TOOLCHAIN_JDK_DISTRIBUTION=zulu   # Override toolchainJdkDistribution
+export MVNW_TOOLCHAIN_JDK_DISTRIBUTION_URL=https://...  # Override toolchainJdkDistributionUrl
+export MVNW_TOOLCHAIN_JDK_SHA256_SUM=def456...          # Override toolchainJdkSha256Sum
+
+# Skip JDK management entirely
+export MVNW_SKIP_JDK=true                     # Use system JDK instead
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:MVNW_JDK_VERSION = "17"
+$env:MVNW_JDK_DISTRIBUTION = "corretto"
+$env:MVNW_SKIP_JDK = "true"
+```
+
 ### Basic JDK Configuration
 
 Add JDK configuration to your `.mvn/wrapper/maven-wrapper.properties` file:
@@ -51,7 +85,7 @@ Add JDK configuration to your `.mvn/wrapper/maven-wrapper.properties` file:
 ```properties
 # JDK Management
 jdkVersion=17                # Resolves to latest 17.x (e.g., 17.0.14)
-jdkDistribution=temurin      # Disco API distribution name
+jdkDistribution=temurin      # Distribution name from Disco API (default: temurin)
 
 # Optional: Update policy (Maven-style)
 jdkUpdatePolicy=daily        # never, daily, always, interval:X
@@ -73,7 +107,7 @@ For multi-JDK builds using Maven toolchains:
 ```properties
 # Toolchain JDK (automatically added to toolchains.xml)
 toolchainJdkVersion=11
-toolchainJdkDistribution=temurin      # Disco API distribution name
+toolchainJdkDistribution=temurin      # Distribution name from Disco API (default: temurin)
 
 # Optional: Direct URL (overrides version/distribution resolution)
 toolchainJdkDistributionUrl=https://github.com/adoptium/temurin11-binaries/releases/download/jdk-11.0.19%2B7/OpenJDK11U-jdk_x64_linux_hotspot_11.0.19_7.tar.gz
@@ -109,7 +143,7 @@ jdkVersion=22.0.1      # → Exact version 22.0.1
 
 ### Version Examples by Distribution
 ```properties
-# Temurin (Eclipse Adoptium) - default
+# Temurin (Eclipse Adoptium) - default distribution
 jdkVersion=17          # → 17.0.14+7-tem
 jdkVersion=21          # → 21.0.7+7-tem
 
@@ -126,12 +160,12 @@ jdkDistribution=corretto
 
 ## Supported JDK Distributions
 
-The Maven Wrapper supports 34+ JDK distributions through the Foojay Disco API using native distribution names:
+The Maven Wrapper supports multiple JDK distributions through the [Foojay Disco API](https://api.foojay.io/disco/v3.0/distributions) using native distribution names:
 
 ### Popular Distributions
 
-| Distribution | Description | Recommended Use |
-|-------------|-------------|-----------------|
+| Distribution | Description | Use Case |
+|-------------|-------------|----------|
 | `temurin` | Eclipse Adoptium (default) | General purpose, excellent support |
 | `corretto` | Amazon Corretto | AWS environments, enterprise |
 | `zulu` | Azul Zulu | Commercial support available |
@@ -284,17 +318,11 @@ To suppress these warnings, use -DskipJdkWarnings=true
 - **Development**: LTS versions recommended, non-LTS acceptable with warnings
 - **Long-term projects**: Always use direct URLs for non-LTS versions
 
-## Environment Variables
+## Runtime Control Variables
 
-Configure JDK settings and behavior via environment variables:
+Additional environment variables for runtime control:
 
 ```bash
-# JDK Configuration
-export MAVEN_WRAPPER_JDK_VERSION=17
-export MAVEN_WRAPPER_JDK_DISTRIBUTION=temurin
-export MAVEN_WRAPPER_JDK_DOWNLOAD=true
-export MAVEN_WRAPPER_TOOLCHAIN_JDK=11
-
 # Runtime Control
 export MVNW_SKIP_JDK=true          # Skip JDK installation, use system JDK
 export MVNW_VERBOSE=true           # Enable verbose output
