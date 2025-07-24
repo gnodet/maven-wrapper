@@ -676,7 +676,17 @@ public class WrapperMojo extends AbstractMojo {
         Set<Integer> ltsVersions = new HashSet<>();
 
         // Try to get LTS versions from Disco API with retry logic
-        String apiResponse = fetchFromDiscoApiWithRetry(DISCO_API_BASE_URL + "/major_versions", 3, 2000);
+        // Use optimized query parameters to minimize response size and API load:
+        // - ea=false: exclude early access versions
+        // - ga=false: exclude general availability versions (we only want LTS)
+        // - maintained=true: only include currently maintained versions
+        // - include_build=false: exclude build information
+        // - include_versions=false: exclude detailed version information
+        String apiResponse = fetchFromDiscoApiWithRetry(
+                DISCO_API_BASE_URL
+                        + "/major_versions?ea=false&ga=false&maintained=true&include_build=false&include_versions=false",
+                3,
+                2000);
 
         if (apiResponse != null) {
             try {
