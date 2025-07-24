@@ -214,10 +214,13 @@ download_file_with_retry() {
   base_delay="${4:-2}"
 
   attempt=1
+  last_http_status=""
+
   while [ "$attempt" -le "$max_attempts" ]; do
     if command -v curl >/dev/null; then
       # Use curl with status code capture
       http_status="$(curl -s -w "%{http_code}" -L -o "$output_file" "$url" 2>/dev/null)"
+      last_http_status="$http_status"
 
       if [ "$http_status" = "200" ]; then
         return 0
@@ -246,6 +249,7 @@ download_file_with_retry() {
       else
         # Extract HTTP status code from wget's server response output
         http_status="$(grep -o 'HTTP/[0-9.]\+ [0-9]\+' "$temp_headers" 2>/dev/null | tail -1 | awk '{print $2}')"
+        last_http_status="$http_status"
 
         if [ -n "$http_status" ] && [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ "$attempt" -lt "$max_attempts" ]; then
           # 5xx error, retry with exponential backoff (POSIX-compliant)
@@ -284,15 +288,24 @@ download_file_with_retry() {
         verbose "Download failed, retrying in ${delay}s (attempt $attempt/$max_attempts)"
         sleep "$delay"
       else
+        last_http_status="unknown"
         echo "HTTP_ERROR:unknown" >&2
         return 1
       fi
     else
+      last_http_status="no_client"
       echo "HTTP_ERROR:no_client" >&2
       return 1
     fi
     attempt=$((attempt + 1))
   done
+
+  # If we get here, all attempts failed
+  if [ -n "$last_http_status" ]; then
+    echo "HTTP_ERROR:$last_http_status" >&2
+  else
+    echo "HTTP_ERROR:unknown" >&2
+  fi
   return 1
 }
 
@@ -827,11 +840,16 @@ install_jdk() {
   # Download using retry strategy for better reliability
   if [ -z "${MVNW_USERNAME-}" ]; then
     verbose "Downloading JDK with retry strategy"
-    if download_file_with_retry "$url" "$jdk_file" 3 2; then
+
+    # Capture stderr to get HTTP status if download fails
+    download_stderr="$(download_file_with_retry "$url" "$jdk_file" 3 2 2>&1)"
+    download_result=$?
+
+    if [ $download_result -eq 0 ]; then
       verbose "JDK download completed successfully"
     else
-      # Extract HTTP status for better error reporting
-      http_status="$(download_file_with_retry "$url" "$jdk_file" 1 1 2>&1 | sed -n 's/HTTP_ERROR://p')"
+      # Extract HTTP status from stderr
+      http_status="$(echo "$download_stderr" | sed -n 's/HTTP_ERROR://p')"
       if [ -n "$http_status" ] && [ "$http_status" != "unknown" ]; then
         die "Failed to download JDK: HTTP $http_status from $url"
       else
@@ -1019,11 +1037,16 @@ esac
 
 if [ -z "${MVNW_USERNAME-}" ]; then
   verbose "Downloading Maven distribution with retry strategy"
-  if download_file_with_retry "$distributionUrl" "$TMP_DOWNLOAD_DIR/$distributionUrlName" 3 2; then
+
+  # Capture stderr to get HTTP status if download fails
+  download_stderr="$(download_file_with_retry "$distributionUrl" "$TMP_DOWNLOAD_DIR/$distributionUrlName" 3 2 2>&1)"
+  download_result=$?
+
+  if [ $download_result -eq 0 ]; then
     verbose "Maven distribution download completed successfully"
   else
-    # Extract HTTP status for better error reporting
-    http_status="$(download_file_with_retry "$distributionUrl" "$TMP_DOWNLOAD_DIR/$distributionUrlName" 1 1 2>&1 | sed -n 's/HTTP_ERROR://p')"
+    # Extract HTTP status from stderr
+    http_status="$(echo "$download_stderr" | sed -n 's/HTTP_ERROR://p')"
     if [ -n "$http_status" ] && [ "$http_status" != "unknown" ]; then
       die "Failed to download Maven distribution: HTTP $http_status from $distributionUrl"
     else
