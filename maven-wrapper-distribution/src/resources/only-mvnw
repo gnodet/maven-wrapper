@@ -417,14 +417,17 @@ resolve_jdk_url() {
     _resolve_http_status="$(retry_http_request "$_resolve_disco_api_url" 1 1 2>&1 >/dev/null | sed -n 's/HTTP_ERROR://p')"
     _resolve_api_response=""
     verbose "Disco API returned HTTP status: $_resolve_http_status"
-  else
-    echo "ERROR: Cannot resolve JDK URL - no HTTP client available (curl, wget, or busybox wget required)" >&2
-    echo "" >&2
-    echo "To fix this issue:" >&2
-    echo "1. Install curl or wget on your system" >&2
-    echo "2. Use a direct JDK URL with jdkDistributionUrl in maven-wrapper.properties" >&2
-    echo "3. Set MVNW_SKIP_JDK=true to use system JDK" >&2
-    die "Cannot resolve JDK URL: curl, wget, or busybox wget required"
+
+    # Check if it's a "no client" error
+    if [ "$_resolve_http_status" = "no_client" ]; then
+      echo "ERROR: Cannot resolve JDK URL - no HTTP client available (curl, wget, or busybox wget required)" >&2
+      echo "" >&2
+      echo "To fix this issue:" >&2
+      echo "1. Install curl or wget on your system" >&2
+      echo "2. Use a direct JDK URL with jdkDistributionUrl in maven-wrapper.properties" >&2
+      echo "3. Set MVNW_SKIP_JDK=true to use system JDK" >&2
+      die "Cannot resolve JDK URL: curl, wget, or busybox wget required"
+    fi
   fi
 
   if [ -z "$_resolve_api_response" ]; then
@@ -620,12 +623,15 @@ get_latest_version_from_disco() {
     http_status="$(retry_http_request "$disco_api_url" 1 1 2>&1 >/dev/null | sed -n 's/HTTP_ERROR://p')"
     api_response=""
     verbose "Disco API request failed with status: $http_status"
-  else
-    verbose "No HTTP client (curl/wget/busybox wget) available for Disco API"
-    echo "WARNING: Cannot resolve latest JDK version - no HTTP client available" >&2
-    echo "Using specified version as-is: $major_version" >&2
-    echo "To fix this, install curl or wget, or use a specific JDK version" >&2
-    return 1 # No HTTP client available
+
+    # Check if it's a "no client" error
+    if [ "$http_status" = "no_client" ]; then
+      verbose "No HTTP client (curl/wget/busybox wget) available for Disco API"
+      echo "WARNING: Cannot resolve latest JDK version - no HTTP client available" >&2
+      echo "Using specified version as-is: $major_version" >&2
+      echo "To fix this, install curl or wget, or use a specific JDK version" >&2
+      return 1 # No HTTP client available
+    fi
   fi
 
   if [ -z "$api_response" ]; then
