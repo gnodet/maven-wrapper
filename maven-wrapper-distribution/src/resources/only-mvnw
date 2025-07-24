@@ -1035,23 +1035,26 @@ case "${MVNW_PASSWORD:+has-password}" in
 has-password) [ -n "${MVNW_USERNAME-}" ] || MVNW_USERNAME='' MVNW_PASSWORD='' ;;
 esac
 
-if [ -z "${MVNW_USERNAME-}" ]; then
-  verbose "Downloading Maven distribution with retry strategy"
-
-  # Capture stderr to get HTTP status if download fails
-  download_stderr="$(download_file_with_retry "$distributionUrl" "$TMP_DOWNLOAD_DIR/$distributionUrlName" 3 2 2>&1)"
-  download_result=$?
-
-  if [ $download_result -eq 0 ]; then
+if [ -z "${MVNW_USERNAME-}" ] && command -v wget >/dev/null; then
+  verbose "Found wget ... using wget"
+  if download_file_with_retry "$distributionUrl" "$TMP_DOWNLOAD_DIR/$distributionUrlName" 3 2; then
     verbose "Maven distribution download completed successfully"
   else
-    # Extract HTTP status from stderr
-    http_status="$(echo "$download_stderr" | sed -n 's/HTTP_ERROR://p')"
-    if [ -n "$http_status" ] && [ "$http_status" != "unknown" ]; then
-      die "Failed to download Maven distribution: HTTP $http_status from $distributionUrl"
-    else
-      die "Failed to download Maven distribution from $distributionUrl (network error)"
-    fi
+    die "wget: Failed to fetch $distributionUrl"
+  fi
+elif [ -z "${MVNW_USERNAME-}" ] && command -v curl >/dev/null; then
+  verbose "Found curl ... using curl"
+  if download_file_with_retry "$distributionUrl" "$TMP_DOWNLOAD_DIR/$distributionUrlName" 3 2; then
+    verbose "Maven distribution download completed successfully"
+  else
+    die "curl: Failed to fetch $distributionUrl"
+  fi
+elif [ -z "${MVNW_USERNAME-}" ] && command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
+  verbose "Found busybox wget ... using busybox wget"
+  if download_file_with_retry "$distributionUrl" "$TMP_DOWNLOAD_DIR/$distributionUrlName" 3 2; then
+    verbose "Maven distribution download completed successfully"
+  else
+    die "busybox wget: Failed to fetch $distributionUrl"
   fi
 elif set_java_home; then
   verbose "Falling back to use Java to download"
