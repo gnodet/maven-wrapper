@@ -190,6 +190,80 @@ retry_http_request() {
   return 1
 }
 
+# Download file with retry logic and exponential backoff
+download_file_with_retry() {
+  url="$1"
+  output_file="$2"
+  max_attempts="${3:-3}"
+  base_delay="${4:-2}"
+
+  attempt=1
+  while [ $attempt -le $max_attempts ]; do
+    if command -v curl >/dev/null; then
+      # Use curl with status code capture
+      http_status="$(curl -s -w "%{http_code}" -L -o "$output_file" "$url" 2>/dev/null)"
+
+      if [ "$http_status" = "200" ]; then
+        return 0
+      elif [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ $attempt -lt $max_attempts ]; then
+        # 5xx error, retry with exponential backoff
+        delay=$((base_delay ** attempt))
+        verbose "HTTP $http_status received, retrying download in ${delay}s (attempt $attempt/$max_attempts)"
+        sleep $delay
+      else
+        # Non-retryable error or max attempts reached
+        echo "HTTP_ERROR:$http_status" >&2
+        return 1
+      fi
+    elif command -v wget >/dev/null; then
+      # Use wget with status code extraction
+      temp_headers="$(mktemp)"
+
+      if wget --server-response -q -O "$output_file" "$url" 2>"$temp_headers"; then
+        rm -f "$temp_headers" 2>/dev/null || true
+        return 0
+      else
+        # Extract HTTP status code from wget's server response output
+        http_status="$(grep -o 'HTTP/[0-9.]\+ [0-9]\+' "$temp_headers" 2>/dev/null | tail -1 | awk '{print $2}')"
+
+        if [ -n "$http_status" ] && [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ $attempt -lt $max_attempts ]; then
+          # 5xx error, retry with exponential backoff
+          delay=$((base_delay ** attempt))
+          verbose "HTTP $http_status received, retrying download in ${delay}s (attempt $attempt/$max_attempts)"
+          sleep $delay
+        else
+          # Non-retryable error or max attempts reached
+          rm -f "$temp_headers" 2>/dev/null || true
+          if [ -n "$http_status" ]; then
+            echo "HTTP_ERROR:$http_status" >&2
+          else
+            echo "HTTP_ERROR:unknown" >&2
+          fi
+          return 1
+        fi
+        rm -f "$temp_headers" 2>/dev/null || true
+      fi
+    elif command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
+      # Busybox wget fallback (limited functionality)
+      if busybox wget -q -O "$output_file" "$url" 2>/dev/null; then
+        return 0
+      elif [ $attempt -lt $max_attempts ]; then
+        delay=$((base_delay ** attempt))
+        verbose "Download failed, retrying in ${delay}s (attempt $attempt/$max_attempts)"
+        sleep $delay
+      else
+        echo "HTTP_ERROR:unknown" >&2
+        return 1
+      fi
+    else
+      echo "HTTP_ERROR:no_client" >&2
+      return 1
+    fi
+    attempt=$((attempt + 1))
+  done
+  return 1
+}
+
 detect_platform() {
   case "$(uname)" in
   Darwin*) echo "macos" ;;
@@ -713,15 +787,23 @@ install_jdk() {
 
   verbose "Downloading JDK to: $jdk_file"
 
-  # Download using available tools
-  if [ -z "${MVNW_USERNAME-}" ] && command -v wget >/dev/null; then
-    wget --tries=5 --waitretry=10 --retry-connrefused ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$url" -O "$jdk_file" || die "wget: Failed to fetch JDK from $url"
-  elif [ -z "${MVNW_USERNAME-}" ] && command -v curl >/dev/null; then
-    curl --retry 5 --retry-delay 10 ${__MVNW_QUIET_CURL:+"$__MVNW_QUIET_CURL"} -f -L -o "$jdk_file" "$url" || die "curl: Failed to fetch JDK from $url"
-  elif [ -z "${MVNW_USERNAME-}" ] && command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
-    busybox wget --tries=5 ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$url" -O "$jdk_file" || die "busybox wget: Failed to fetch JDK from $url"
+  # Download using retry strategy for better reliability
+  if [ -z "${MVNW_USERNAME-}" ]; then
+    verbose "Downloading JDK with retry strategy"
+    if download_file_with_retry "$url" "$jdk_file" 3 2; then
+      verbose "JDK download completed successfully"
+    else
+      # Extract HTTP status for better error reporting
+      http_status="$(download_file_with_retry "$url" "$jdk_file" 1 1 2>&1 | sed -n 's/HTTP_ERROR://p')"
+      if [ -n "$http_status" ] && [ "$http_status" != "unknown" ]; then
+        die "Failed to download JDK: HTTP $http_status from $url"
+      else
+        die "Failed to download JDK from $url (network error)"
+      fi
+    fi
   else
-    die "Cannot download JDK: wget, curl, or busybox wget required"
+    # Fallback to authenticated download with Java (keep existing logic)
+    die "Authenticated JDK download not yet supported - use MVNW_SKIP_JDK=true"
   fi
 
   # Verify checksum if provided
@@ -876,15 +958,19 @@ case "${MVNW_PASSWORD:+has-password}" in
 has-password) [ -n "${MVNW_USERNAME-}" ] || MVNW_USERNAME='' MVNW_PASSWORD='' ;;
 esac
 
-if [ -z "${MVNW_USERNAME-}" ] && command -v wget >/dev/null; then
-  verbose "Found wget ... using wget"
-  wget --tries=5 --waitretry=10 --retry-connrefused ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$distributionUrl" -O "$TMP_DOWNLOAD_DIR/$distributionUrlName" || die "wget: Failed to fetch $distributionUrl"
-elif [ -z "${MVNW_USERNAME-}" ] && command -v curl >/dev/null; then
-  verbose "Found curl ... using curl"
-  curl --retry 5 --retry-delay 10 ${__MVNW_QUIET_CURL:+"$__MVNW_QUIET_CURL"} -f -L -o "$TMP_DOWNLOAD_DIR/$distributionUrlName" "$distributionUrl" || die "curl: Failed to fetch $distributionUrl"
-elif [ -z "${MVNW_USERNAME-}" ] && command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
-  verbose "Found busybox wget ... using busybox wget"
-  busybox wget --tries=5 ${__MVNW_QUIET_WGET:+"$__MVNW_QUIET_WGET"} "$distributionUrl" -O "$TMP_DOWNLOAD_DIR/$distributionUrlName" || die "busybox wget: Failed to fetch $distributionUrl"
+if [ -z "${MVNW_USERNAME-}" ]; then
+  verbose "Downloading Maven distribution with retry strategy"
+  if download_file_with_retry "$distributionUrl" "$TMP_DOWNLOAD_DIR/$distributionUrlName" 3 2; then
+    verbose "Maven distribution download completed successfully"
+  else
+    # Extract HTTP status for better error reporting
+    http_status="$(download_file_with_retry "$distributionUrl" "$TMP_DOWNLOAD_DIR/$distributionUrlName" 1 1 2>&1 | sed -n 's/HTTP_ERROR://p')"
+    if [ -n "$http_status" ] && [ "$http_status" != "unknown" ]; then
+      die "Failed to download Maven distribution: HTTP $http_status from $distributionUrl"
+    else
+      die "Failed to download Maven distribution from $distributionUrl (network error)"
+    fi
+  fi
 elif set_java_home; then
   verbose "Falling back to use Java to download"
   javaSource="$TMP_DOWNLOAD_DIR/Downloader.java"
