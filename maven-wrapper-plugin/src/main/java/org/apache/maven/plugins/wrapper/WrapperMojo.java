@@ -632,8 +632,11 @@ public class WrapperMojo extends AbstractMojo {
                         return response.toString();
                     }
                 } else if (responseCode >= 500 && responseCode < 600 && attempt < maxAttempts) {
-                    // 5xx server error - retry with exponential backoff
-                    int delay = baseDelayMs * (1 << (attempt - 1)); // Exponential backoff: 2s, 4s, 8s
+                    // 5xx server error - retry with exponential backoff and jitter
+                    int baseDelay = baseDelayMs * (1 << (attempt - 1)); // Exponential backoff: 2s, 4s, 8s
+                    // Add random jitter of 0-20% to avoid thundering herd problem
+                    int jitter = (int) (baseDelay * Math.random() * 0.2);
+                    int delay = baseDelay + jitter;
                     getLog().debug("Disco API returned HTTP " + responseCode + ", retrying in " + delay + "ms (attempt "
                             + attempt + "/" + maxAttempts + ")");
                     Thread.sleep(delay);
@@ -646,7 +649,10 @@ public class WrapperMojo extends AbstractMojo {
 
             } catch (Exception e) {
                 if (attempt < maxAttempts) {
-                    int delay = baseDelayMs * (1 << (attempt - 1));
+                    int baseDelay = baseDelayMs * (1 << (attempt - 1));
+                    // Add random jitter of 0-20% to avoid thundering herd problem
+                    int jitter = (int) (baseDelay * Math.random() * 0.2);
+                    int delay = baseDelay + jitter;
                     getLog().debug("Disco API request failed: " + e.getMessage() + ", retrying in " + delay
                             + "ms (attempt " + attempt + "/" + maxAttempts + ")");
                     try {
