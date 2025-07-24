@@ -115,7 +115,7 @@ retry_http_request() {
   base_delay="${3:-2}"
 
   attempt=1
-  while [ $attempt -le $max_attempts ]; do
+  while [ "$attempt" -le "$max_attempts" ]; do
     if command -v curl >/dev/null; then
       # Use curl with status code capture
       temp_response="$(mktemp)"
@@ -214,7 +214,7 @@ download_file_with_retry() {
   base_delay="${4:-2}"
 
   attempt=1
-  while [ $attempt -le $max_attempts ]; do
+  while [ "$attempt" -le "$max_attempts" ]; do
     if command -v curl >/dev/null; then
       # Use curl with status code capture
       http_status="$(curl -s -w "%{http_code}" -L -o "$output_file" "$url" 2>/dev/null)"
