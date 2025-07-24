@@ -107,6 +107,52 @@ verbose() { :; }
 [ "${MVNW_VERBOSE-}" != true ] || verbose() { printf %s\\n "${1-}" >&2; }
 
 # JDK management functions
+
+# Retry HTTP request with exponential backoff for 5xx errors
+retry_http_request() {
+  url="$1"
+  max_attempts="${2:-3}"
+  base_delay="${3:-2}"
+
+  attempt=1
+  while [ $attempt -le $max_attempts ]; do
+    if command -v curl >/dev/null; then
+      temp_response="$(mktemp)"
+      http_status="$(curl -s -w "%{http_code}" -o "$temp_response" "$url" 2>/dev/null)"
+
+      if [ "$http_status" = "200" ]; then
+        cat "$temp_response"
+        rm -f "$temp_response" 2>/dev/null || true
+        return 0
+      elif [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ $attempt -lt $max_attempts ]; then
+        # 5xx error, retry with exponential backoff
+        delay=$((base_delay ** attempt))
+        verbose "HTTP $http_status received, retrying in ${delay}s (attempt $attempt/$max_attempts)"
+        sleep $delay
+      else
+        # Non-retryable error or max attempts reached
+        rm -f "$temp_response" 2>/dev/null || true
+        echo "HTTP_ERROR:$http_status" >&2
+        return 1
+      fi
+      rm -f "$temp_response" 2>/dev/null || true
+    else
+      # Fallback to basic retry without status code detection
+      if wget -q -O - "$url" 2>/dev/null; then
+        return 0
+      elif [ $attempt -lt $max_attempts ]; then
+        delay=$((base_delay ** attempt))
+        verbose "Request failed, retrying in ${delay}s (attempt $attempt/$max_attempts)"
+        sleep $delay
+      else
+        return 1
+      fi
+    fi
+    attempt=$((attempt + 1))
+  done
+  return 1
+}
+
 detect_platform() {
   case "$(uname)" in
   Darwin*) echo "macos" ;;
@@ -218,9 +264,19 @@ resolve_jdk_url() {
 
   verbose "Resolving JDK download URL from Disco API: $_resolve_disco_api_url"
 
-  # Make HTTP request to Disco API
+  # Make HTTP request to Disco API with better error handling
+  _resolve_http_status=""
   if command -v curl >/dev/null; then
-    _resolve_api_response="$(curl --retry 5 --retry-delay 10 -s -f "$_resolve_disco_api_url" 2>/dev/null)"
+    # Use curl with status code capture and retry on 5xx errors
+    _resolve_temp_response="$(mktemp)"
+    _resolve_http_status="$(curl --retry 5 --retry-delay 10 --retry-all-errors -s -w "%{http_code}" -o "$_resolve_temp_response" "$_resolve_disco_api_url" 2>/dev/null)"
+    if [ "$_resolve_http_status" = "200" ]; then
+      _resolve_api_response="$(cat "$_resolve_temp_response")"
+    else
+      _resolve_api_response=""
+      verbose "Disco API returned HTTP status: $_resolve_http_status"
+    fi
+    rm -f "$_resolve_temp_response" 2>/dev/null || true
   elif command -v wget >/dev/null; then
     _resolve_api_response="$(wget --tries=5 --waitretry=10 --retry-connrefused -q -O - "$_resolve_disco_api_url" 2>/dev/null)"
   elif command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
@@ -237,19 +293,34 @@ resolve_jdk_url() {
 
   if [ -z "$_resolve_api_response" ]; then
     echo "ERROR: Failed to get JDK package information from Disco API" >&2
+    if [ -n "$_resolve_http_status" ] && [ "$_resolve_http_status" != "200" ]; then
+      echo "HTTP Status: $_resolve_http_status" >&2
+      if [ "$_resolve_http_status" = "503" ]; then
+        echo "The Disco API is temporarily unavailable (Service Unavailable)" >&2
+      elif [ "$_resolve_http_status" = "429" ]; then
+        echo "Rate limited by Disco API (Too Many Requests)" >&2
+      elif [ "$_resolve_http_status" = "404" ]; then
+        echo "JDK package not found (Not Found)" >&2
+      else
+        echo "Disco API returned error status: $_resolve_http_status" >&2
+      fi
+    fi
     echo "Version: $_resolved_version, Distribution: $_resolve_distribution" >&2
     echo "Platform: $_resolve_platform $_resolve_architecture" >&2
+    echo "API URL: $_resolve_disco_api_url" >&2
     echo "" >&2
     echo "This could be due to:" >&2
     echo "1. Network connectivity issues" >&2
-    echo "2. Disco API being temporarily unavailable" >&2
-    echo "3. Invalid JDK version or distribution combination" >&2
+    echo "2. Disco API being temporarily unavailable (HTTP 503)" >&2
+    echo "3. Rate limiting (HTTP 429)" >&2
+    echo "4. Invalid JDK version or distribution combination (HTTP 404)" >&2
     echo "" >&2
     echo "To fix this issue:" >&2
     echo "1. Check your internet connection" >&2
-    echo "2. Use a direct JDK URL with jdkDistributionUrl in maven-wrapper.properties" >&2
-    echo "3. Set MVNW_SKIP_JDK=true to use system JDK" >&2
-    echo "4. Try a different JDK distribution (temurin, corretto, zulu, etc.)" >&2
+    echo "2. Wait a few minutes and try again (if HTTP 503/429)" >&2
+    echo "3. Use a direct JDK URL with jdkDistributionUrl in maven-wrapper.properties" >&2
+    echo "4. Set MVNW_SKIP_JDK=true to use system JDK" >&2
+    echo "5. Try a different JDK distribution (temurin, corretto, zulu, etc.)" >&2
     die "Failed to get JDK package information for version $_resolved_version, distribution $_resolve_distribution on $_resolve_platform $_resolve_architecture"
   fi
 
@@ -400,12 +471,16 @@ get_latest_version_from_disco() {
 
   verbose "Querying Disco API for JDK versions: $disco_api_url"
 
-  if command -v curl >/dev/null; then
-    api_response="$(curl --retry 5 --retry-delay 10 -s -f "$disco_api_url" 2>/dev/null)"
-  elif command -v wget >/dev/null; then
-    api_response="$(wget --tries=5 --waitretry=10 --retry-connrefused -q -O - "$disco_api_url" 2>/dev/null)"
-  elif command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
-    api_response="$(busybox wget --tries=5 -q -O - "$disco_api_url" 2>/dev/null)"
+  # Make HTTP request with retry logic for 5xx errors
+  http_status=""
+  api_response="$(retry_http_request "$disco_api_url" 3 2 2>/dev/null)"
+  retry_result=$?
+
+  if [ $retry_result -ne 0 ]; then
+    # Extract HTTP status from stderr if available
+    http_status="$(retry_http_request "$disco_api_url" 1 1 2>&1 >/dev/null | sed -n 's/HTTP_ERROR://p')"
+    api_response=""
+    verbose "Disco API request failed with status: $http_status"
   else
     verbose "No HTTP client (curl/wget/busybox wget) available for Disco API"
     echo "WARNING: Cannot resolve latest JDK version - no HTTP client available" >&2
@@ -417,8 +492,18 @@ get_latest_version_from_disco() {
   if [ -z "$api_response" ]; then
     verbose "Disco API returned empty response for version resolution"
     echo "WARNING: Cannot resolve latest JDK version from Disco API" >&2
+    if [ -n "$http_status" ] && [ "$http_status" != "200" ]; then
+      echo "HTTP Status: $http_status" >&2
+      if [ "$http_status" = "503" ]; then
+        echo "The Disco API is temporarily unavailable (Service Unavailable)" >&2
+        echo "This is likely a temporary issue with the Foojay Disco API service" >&2
+      elif [ "$http_status" = "429" ]; then
+        echo "Rate limited by Disco API (Too Many Requests)" >&2
+      fi
+    fi
     echo "Using specified version as-is: $major_version" >&2
-    echo "This could be due to network issues or API unavailability" >&2
+    echo "API URL: $disco_api_url" >&2
+    echo "This could be due to network issues, API unavailability, or rate limiting" >&2
     return 1 # API call failed
   fi
 

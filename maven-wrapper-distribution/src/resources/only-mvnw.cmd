@@ -328,19 +328,36 @@ function Install-JDK {
           return
           }
         } catch {
-          # Network or API error
-          Write-Error "Failed to resolve JDK version $Version from Disco API: $($_.Exception.Message)"
+          # Network or API error - extract HTTP status if available
+          $httpStatus = ""
+          if ($_.Exception -is [System.Net.WebException] -and $_.Exception.Response) {
+            $httpStatus = [int]$_.Exception.Response.StatusCode
+            Write-Error "Failed to resolve JDK version $Version from Disco API: HTTP $httpStatus"
+            if ($httpStatus -eq 503) {
+              Write-Error "The Disco API is temporarily unavailable (Service Unavailable)"
+              Write-Error "This is likely a temporary issue with the Foojay Disco API service"
+            } elseif ($httpStatus -eq 429) {
+              Write-Error "Rate limited by Disco API (Too Many Requests)"
+            } elseif ($httpStatus -eq 404) {
+              Write-Error "JDK version not found (Not Found)"
+            }
+          } else {
+            Write-Error "Failed to resolve JDK version $Version from Disco API: $($_.Exception.Message)"
+          }
+          Write-Error "API URL: $discoApiUrl"
           Write-Error ""
           Write-Error "This could be due to:"
           Write-Error "1. Network connectivity issues"
-          Write-Error "2. Disco API being temporarily unavailable"
-          Write-Error "3. Invalid JDK version or distribution combination"
+          Write-Error "2. Disco API being temporarily unavailable (HTTP 503)"
+          Write-Error "3. Rate limiting (HTTP 429)"
+          Write-Error "4. Invalid JDK version or distribution combination (HTTP 404)"
           Write-Error ""
           Write-Error "To fix this issue:"
           Write-Error "1. Check your internet connection"
-          Write-Error "2. Use a direct JDK URL with jdkDistributionUrl in maven-wrapper.properties"
-          Write-Error "3. Set MVNW_SKIP_JDK=true to use system JDK"
-          Write-Error "4. Try a different JDK distribution (temurin, corretto, zulu, etc.)"
+          Write-Error "2. Wait a few minutes and try again (if HTTP 503/429)"
+          Write-Error "3. Use a direct JDK URL with jdkDistributionUrl in maven-wrapper.properties"
+          Write-Error "4. Set MVNW_SKIP_JDK=true to use system JDK"
+          Write-Error "5. Try a different JDK distribution (temurin, corretto, zulu, etc.)"
           return
         }
       }
@@ -406,7 +423,20 @@ function Install-JDK {
         $Url = $redirectUrl
       }
     } catch {
-      Write-Error "Failed to resolve JDK URL from Disco API: $($_.Exception.Message)"
+      # Extract HTTP status if available
+      $httpStatus = ""
+      if ($_.Exception -is [System.Net.WebException] -and $_.Exception.Response) {
+        $httpStatus = [int]$_.Exception.Response.StatusCode
+        Write-Error "Failed to resolve JDK URL from Disco API: HTTP $httpStatus"
+        if ($httpStatus -eq 503) {
+          Write-Error "The Disco API is temporarily unavailable (Service Unavailable)"
+        } elseif ($httpStatus -eq 429) {
+          Write-Error "Rate limited by Disco API (Too Many Requests)"
+        }
+      } else {
+        Write-Error "Failed to resolve JDK URL from Disco API: $($_.Exception.Message)"
+      }
+      Write-Error "API URL: $discoPackageUrl"
       return
     }
 
