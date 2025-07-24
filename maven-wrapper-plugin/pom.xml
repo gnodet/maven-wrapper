@@ -167,6 +167,7 @@ under the License.
               <properties>
                 <maven.compiler.source>${invoker.maven.compiler.source}</maven.compiler.source>
                 <maven.compiler.target>${invoker.maven.compiler.target}</maven.compiler.target>
+                <maven>3.9.9</maven>
               </properties>
               <filterProperties>
                 <mrm.repository.url>${mrm.repository.url}</mrm.repository.url>
