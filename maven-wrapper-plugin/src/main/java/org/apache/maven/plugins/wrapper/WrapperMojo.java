@@ -605,7 +605,67 @@ public class WrapperMojo extends AbstractMojo {
     private static Set<Integer> ltsVersionsCache = null;
 
     /**
-     * Get LTS versions from Disco API with caching.
+     * Fetch data from Disco API with retry logic for 5xx errors.
+     * Returns null if all attempts fail.
+     */
+    private String fetchFromDiscoApiWithRetry(String apiUrl, int maxAttempts, int baseDelayMs) {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                URL url = new URL(apiUrl);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(5000); // 5 second timeout
+                connection.setReadTimeout(10000); // 10 second timeout
+
+                int responseCode = connection.getResponseCode();
+
+                if (responseCode == 200) {
+                    // Success - read and return response
+                    try (BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+
+                        String line;
+                        StringBuilder response = new StringBuilder();
+                        while ((line = reader.readLine()) != null) {
+                            response.append(line);
+                        }
+                        return response.toString();
+                    }
+                } else if (responseCode >= 500 && responseCode < 600 && attempt < maxAttempts) {
+                    // 5xx server error - retry with exponential backoff
+                    int delay = baseDelayMs * (1 << (attempt - 1)); // Exponential backoff: 2s, 4s, 8s
+                    getLog().debug("Disco API returned HTTP " + responseCode + ", retrying in " + delay + "ms (attempt "
+                            + attempt + "/" + maxAttempts + ")");
+                    Thread.sleep(delay);
+                } else {
+                    // Non-retryable error (4xx) or max attempts reached
+                    getLog().debug("Disco API returned HTTP " + responseCode + " (attempt " + attempt + "/"
+                            + maxAttempts + ")");
+                    return null;
+                }
+
+            } catch (Exception e) {
+                if (attempt < maxAttempts) {
+                    int delay = baseDelayMs * (1 << (attempt - 1));
+                    getLog().debug("Disco API request failed: " + e.getMessage() + ", retrying in " + delay
+                            + "ms (attempt " + attempt + "/" + maxAttempts + ")");
+                    try {
+                        Thread.sleep(delay);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                } else {
+                    getLog().debug("Disco API request failed after " + maxAttempts + " attempts: " + e.getMessage());
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get LTS versions from Disco API with caching and retry logic.
      * Falls back to hardcoded list if API is unavailable.
      */
     private Set<Integer> getLtsVersionsFromDiscoApi() {
@@ -615,43 +675,28 @@ public class WrapperMojo extends AbstractMojo {
 
         Set<Integer> ltsVersions = new HashSet<>();
 
-        try {
-            URL url = new URL(DISCO_API_BASE_URL + "/major_versions");
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setConnectTimeout(5000); // 5 second timeout
-            connection.setReadTimeout(10000); // 10 second timeout
+        // Try to get LTS versions from Disco API with retry logic
+        String apiResponse = fetchFromDiscoApiWithRetry(DISCO_API_BASE_URL + "/major_versions", 3, 2000);
 
-            if (connection.getResponseCode() == 200) {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+        if (apiResponse != null) {
+            try {
+                // Parse JSON response to extract LTS versions
+                // Look for "major_version": X, "term_of_support": "LTS"
+                Pattern pattern = Pattern.compile("\"major_version\":\\s*(\\d+)[^}]*\"term_of_support\":\\s*\"LTS\"");
+                Matcher matcher = pattern.matcher(apiResponse);
 
-                    String line;
-                    StringBuilder response = new StringBuilder();
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-
-                    // Parse JSON response to extract LTS versions
-                    // Look for "major_version": X, "term_of_support": "LTS"
-                    Pattern pattern =
-                            Pattern.compile("\"major_version\":\\s*(\\d+)[^}]*\"term_of_support\":\\s*\"LTS\"");
-                    Matcher matcher = pattern.matcher(response.toString());
-
-                    while (matcher.find()) {
-                        int majorVersion = Integer.parseInt(matcher.group(1));
-                        ltsVersions.add(majorVersion);
-                    }
-
-                    getLog().debug("Retrieved LTS versions from Disco API: " + ltsVersions);
+                while (matcher.find()) {
+                    int majorVersion = Integer.parseInt(matcher.group(1));
+                    ltsVersions.add(majorVersion);
                 }
-            } else {
-                getLog().warn("Failed to fetch LTS versions from Disco API (HTTP " + connection.getResponseCode()
-                        + "), using fallback");
+
+                getLog().debug("Retrieved LTS versions from Disco API: " + ltsVersions);
+            } catch (Exception e) {
+                getLog().debug("Failed to parse LTS versions from Disco API response", e);
                 ltsVersions = getFallbackLtsVersions();
             }
-        } catch (Exception e) {
-            getLog().warn("Failed to fetch LTS versions from Disco API: " + e.getMessage() + ", using fallback");
+        } else {
+            getLog().debug("Failed to fetch LTS versions from Disco API after retries");
             ltsVersions = getFallbackLtsVersions();
         }
 
