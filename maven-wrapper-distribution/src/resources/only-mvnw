@@ -212,7 +212,7 @@ calculate_retry_delay() {
     jitter_percent=$(od -An -N1 -tu1 /dev/urandom 2>/dev/null | awk '{print $1 % 21}')
   else
     # Fallback: use current time and process ID for pseudo-randomness
-    jitter_percent=$(( ($(date +%s) + $$) % 21 ))
+    jitter_percent=$((($(date +%s) + $$) % 21))
   fi
 
   # Apply jitter to delay
