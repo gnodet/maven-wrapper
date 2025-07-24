@@ -126,16 +126,8 @@ retry_http_request() {
         rm -f "$temp_response" 2>/dev/null || true
         return 0
       elif [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ "$attempt" -lt "$max_attempts" ]; then
-        # 5xx error, retry with exponential backoff and jitter (POSIX-compliant)
-        base_delay_calc=2
-        i=1
-        while [ "$i" -lt "$attempt" ]; do
-          base_delay_calc=$((base_delay_calc * base_delay))
-          i=$((i + 1))
-        done
-        # Add random jitter of 0-20% to avoid thundering herd problem
-        jitter=$((base_delay_calc * (RANDOM % 21) / 100))
-        delay=$((base_delay_calc + jitter))
+        # 5xx error, retry with exponential backoff and jitter
+        delay=$(calculate_retry_delay "$attempt" "$base_delay")
         verbose "HTTP $http_status received, retrying in ${delay}s (attempt $attempt/$max_attempts)"
         sleep "$delay"
       else
@@ -161,16 +153,8 @@ retry_http_request() {
         http_status="$(grep -o 'HTTP/[0-9.]\+ [0-9]\+' "$temp_headers" 2>/dev/null | tail -1 | awk '{print $2}')"
 
         if [ -n "$http_status" ] && [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ "$attempt" -lt "$max_attempts" ]; then
-          # 5xx error, retry with exponential backoff and jitter (POSIX-compliant)
-          base_delay_calc=2
-          i=1
-          while [ "$i" -lt "$attempt" ]; do
-            base_delay_calc=$((base_delay_calc * base_delay))
-            i=$((i + 1))
-          done
-          # Add random jitter of 0-20% to avoid thundering herd problem
-          jitter=$((base_delay_calc * (RANDOM % 21) / 100))
-          delay=$((base_delay_calc + jitter))
+          # 5xx error, retry with exponential backoff and jitter
+          delay=$(calculate_retry_delay "$attempt" "$base_delay")
           verbose "HTTP $http_status received, retrying in ${delay}s (attempt $attempt/$max_attempts)"
           sleep "$delay"
         else
@@ -190,16 +174,8 @@ retry_http_request() {
       if busybox wget -q -O - "$url" 2>/dev/null; then
         return 0
       elif [ "$attempt" -lt "$max_attempts" ]; then
-        # POSIX-compliant exponential backoff with jitter
-        base_delay_calc=2
-        i=1
-        while [ "$i" -lt "$attempt" ]; do
-          base_delay_calc=$((base_delay_calc * base_delay))
-          i=$((i + 1))
-        done
-        # Add random jitter of 0-20% to avoid thundering herd problem
-        jitter=$((base_delay_calc * (RANDOM % 21) / 100))
-        delay=$((base_delay_calc + jitter))
+        # Exponential backoff with jitter
+        delay=$(calculate_retry_delay "$attempt" "$base_delay")
         verbose "Request failed, retrying in ${delay}s (attempt $attempt/$max_attempts)"
         sleep "$delay"
       else
@@ -213,6 +189,37 @@ retry_http_request() {
     attempt=$((attempt + 1))
   done
   return 1
+}
+
+# Calculate exponential backoff delay with jitter (POSIX-compliant)
+# Usage: calculate_retry_delay <attempt_number> <base_delay>
+# Returns: delay in seconds with exponential backoff and 0-20% jitter
+calculate_retry_delay() {
+  attempt="$1"
+  base_delay="${2:-2}"
+
+  # Calculate exponential backoff: base_delay * 2^(attempt-1)
+  delay_calc="$base_delay"
+  i=1
+  while [ "$i" -lt "$attempt" ]; do
+    delay_calc=$((delay_calc * 2))
+    i=$((i + 1))
+  done
+
+  # Generate POSIX-compliant random jitter (0-20%)
+  if [ -r /dev/urandom ]; then
+    # Use /dev/urandom if available (most Unix systems)
+    jitter_percent=$(od -An -N1 -tu1 /dev/urandom 2>/dev/null | awk '{print $1 % 21}')
+  else
+    # Fallback: use current time and process ID for pseudo-randomness
+    jitter_percent=$(( ($(date +%s) + $$) % 21 ))
+  fi
+
+  # Apply jitter to delay
+  jitter=$((delay_calc * jitter_percent / 100))
+  final_delay=$((delay_calc + jitter))
+
+  echo "$final_delay"
 }
 
 # Download file with retry logic and exponential backoff
@@ -234,16 +241,8 @@ download_file_with_retry() {
       if [ "$http_status" = "200" ]; then
         return 0
       elif [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ "$attempt" -lt "$max_attempts" ]; then
-        # 5xx error, retry with exponential backoff and jitter (POSIX-compliant)
-        base_delay_calc=2
-        i=1
-        while [ "$i" -lt "$attempt" ]; do
-          base_delay_calc=$((base_delay_calc * base_delay))
-          i=$((i + 1))
-        done
-        # Add random jitter of 0-20% to avoid thundering herd problem
-        jitter=$((base_delay_calc * (RANDOM % 21) / 100))
-        delay=$((base_delay_calc + jitter))
+        # 5xx error, retry with exponential backoff and jitter
+        delay=$(calculate_retry_delay "$attempt" "$base_delay")
         verbose "HTTP $http_status received, retrying download in ${delay}s (attempt $attempt/$max_attempts)"
         sleep "$delay"
       else
@@ -264,16 +263,8 @@ download_file_with_retry() {
         last_http_status="$http_status"
 
         if [ -n "$http_status" ] && [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ "$attempt" -lt "$max_attempts" ]; then
-          # 5xx error, retry with exponential backoff and jitter (POSIX-compliant)
-          base_delay_calc=2
-          i=1
-          while [ "$i" -lt "$attempt" ]; do
-            base_delay_calc=$((base_delay_calc * base_delay))
-            i=$((i + 1))
-          done
-          # Add random jitter of 0-20% to avoid thundering herd problem
-          jitter=$((base_delay_calc * (RANDOM % 21) / 100))
-          delay=$((base_delay_calc + jitter))
+          # 5xx error, retry with exponential backoff and jitter
+          delay=$(calculate_retry_delay "$attempt" "$base_delay")
           verbose "HTTP $http_status received, retrying download in ${delay}s (attempt $attempt/$max_attempts)"
           sleep "$delay"
         else
@@ -293,16 +284,8 @@ download_file_with_retry() {
       if busybox wget -q -O "$output_file" "$url" 2>/dev/null; then
         return 0
       elif [ "$attempt" -lt "$max_attempts" ]; then
-        # POSIX-compliant exponential backoff with jitter
-        base_delay_calc=2
-        i=1
-        while [ "$i" -lt "$attempt" ]; do
-          base_delay_calc=$((base_delay_calc * base_delay))
-          i=$((i + 1))
-        done
-        # Add random jitter of 0-20% to avoid thundering herd problem
-        jitter=$((base_delay_calc * (RANDOM % 21) / 100))
-        delay=$((base_delay_calc + jitter))
+        # Exponential backoff with jitter
+        delay=$(calculate_retry_delay "$attempt" "$base_delay")
         verbose "Download failed, retrying in ${delay}s (attempt $attempt/$max_attempts)"
         sleep "$delay"
       else
