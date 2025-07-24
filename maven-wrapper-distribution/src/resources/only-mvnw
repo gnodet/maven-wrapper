@@ -125,11 +125,16 @@ retry_http_request() {
         cat "$temp_response"
         rm -f "$temp_response" 2>/dev/null || true
         return 0
-      elif [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ $attempt -lt $max_attempts ]; then
-        # 5xx error, retry with exponential backoff
-        delay=$((base_delay ** attempt))
+      elif [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ "$attempt" -lt "$max_attempts" ]; then
+        # 5xx error, retry with exponential backoff (POSIX-compliant)
+        delay=2
+        i=1
+        while [ "$i" -lt "$attempt" ]; do
+          delay=$((delay * base_delay))
+          i=$((i + 1))
+        done
         verbose "HTTP $http_status received, retrying in ${delay}s (attempt $attempt/$max_attempts)"
-        sleep $delay
+        sleep "$delay"
       else
         # Non-retryable error or max attempts reached
         rm -f "$temp_response" 2>/dev/null || true
@@ -152,11 +157,16 @@ retry_http_request() {
         # Extract HTTP status code from wget's server response output
         http_status="$(grep -o 'HTTP/[0-9.]\+ [0-9]\+' "$temp_headers" 2>/dev/null | tail -1 | awk '{print $2}')"
 
-        if [ -n "$http_status" ] && [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ $attempt -lt $max_attempts ]; then
-          # 5xx error, retry with exponential backoff
-          delay=$((base_delay ** attempt))
+        if [ -n "$http_status" ] && [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ "$attempt" -lt "$max_attempts" ]; then
+          # 5xx error, retry with exponential backoff (POSIX-compliant)
+          delay=2
+          i=1
+          while [ "$i" -lt "$attempt" ]; do
+            delay=$((delay * base_delay))
+            i=$((i + 1))
+          done
           verbose "HTTP $http_status received, retrying in ${delay}s (attempt $attempt/$max_attempts)"
-          sleep $delay
+          sleep "$delay"
         else
           # Non-retryable error or max attempts reached
           rm -f "$temp_response" "$temp_headers" 2>/dev/null || true
@@ -173,10 +183,16 @@ retry_http_request() {
       # Busybox wget fallback (limited functionality)
       if busybox wget -q -O - "$url" 2>/dev/null; then
         return 0
-      elif [ $attempt -lt $max_attempts ]; then
-        delay=$((base_delay ** attempt))
+      elif [ "$attempt" -lt "$max_attempts" ]; then
+        # POSIX-compliant exponential backoff
+        delay=2
+        i=1
+        while [ "$i" -lt "$attempt" ]; do
+          delay=$((delay * base_delay))
+          i=$((i + 1))
+        done
         verbose "Request failed, retrying in ${delay}s (attempt $attempt/$max_attempts)"
-        sleep $delay
+        sleep "$delay"
       else
         echo "HTTP_ERROR:unknown" >&2
         return 1
@@ -205,11 +221,16 @@ download_file_with_retry() {
 
       if [ "$http_status" = "200" ]; then
         return 0
-      elif [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ $attempt -lt $max_attempts ]; then
-        # 5xx error, retry with exponential backoff
-        delay=$((base_delay ** attempt))
+      elif [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ "$attempt" -lt "$max_attempts" ]; then
+        # 5xx error, retry with exponential backoff (POSIX-compliant)
+        delay=2
+        i=1
+        while [ "$i" -lt "$attempt" ]; do
+          delay=$((delay * base_delay))
+          i=$((i + 1))
+        done
         verbose "HTTP $http_status received, retrying download in ${delay}s (attempt $attempt/$max_attempts)"
-        sleep $delay
+        sleep "$delay"
       else
         # Non-retryable error or max attempts reached
         echo "HTTP_ERROR:$http_status" >&2
@@ -226,11 +247,16 @@ download_file_with_retry() {
         # Extract HTTP status code from wget's server response output
         http_status="$(grep -o 'HTTP/[0-9.]\+ [0-9]\+' "$temp_headers" 2>/dev/null | tail -1 | awk '{print $2}')"
 
-        if [ -n "$http_status" ] && [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ $attempt -lt $max_attempts ]; then
-          # 5xx error, retry with exponential backoff
-          delay=$((base_delay ** attempt))
+        if [ -n "$http_status" ] && [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ "$attempt" -lt "$max_attempts" ]; then
+          # 5xx error, retry with exponential backoff (POSIX-compliant)
+          delay=2
+          i=1
+          while [ "$i" -lt "$attempt" ]; do
+            delay=$((delay * base_delay))
+            i=$((i + 1))
+          done
           verbose "HTTP $http_status received, retrying download in ${delay}s (attempt $attempt/$max_attempts)"
-          sleep $delay
+          sleep "$delay"
         else
           # Non-retryable error or max attempts reached
           rm -f "$temp_headers" 2>/dev/null || true
@@ -247,10 +273,16 @@ download_file_with_retry() {
       # Busybox wget fallback (limited functionality)
       if busybox wget -q -O "$output_file" "$url" 2>/dev/null; then
         return 0
-      elif [ $attempt -lt $max_attempts ]; then
-        delay=$((base_delay ** attempt))
+      elif [ "$attempt" -lt "$max_attempts" ]; then
+        # POSIX-compliant exponential backoff
+        delay=2
+        i=1
+        while [ "$i" -lt "$attempt" ]; do
+          delay=$((delay * base_delay))
+          i=$((i + 1))
+        done
         verbose "Download failed, retrying in ${delay}s (attempt $attempt/$max_attempts)"
-        sleep $delay
+        sleep "$delay"
       else
         echo "HTTP_ERROR:unknown" >&2
         return 1
