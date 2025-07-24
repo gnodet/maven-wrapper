@@ -833,9 +833,31 @@ install_jdk() {
         die "Failed to download JDK from $url (network error)"
       fi
     fi
+  elif set_java_home; then
+    # Fallback to authenticated download with Java
+    verbose "Downloading JDK with Java (authenticated)"
+    javaSource="$jdk_tmp_dir/JdkDownloader.java"
+    cat >"$javaSource" <<-END
+		public class JdkDownloader extends java.net.Authenticator
+		{
+		  protected java.net.PasswordAuthentication getPasswordAuthentication()
+		  {
+		    return new java.net.PasswordAuthentication( System.getenv( "MVNW_USERNAME" ), System.getenv( "MVNW_PASSWORD" ).toCharArray() );
+		  }
+		  public static void main( String[] args ) throws Exception
+		  {
+		    setDefault( new JdkDownloader() );
+		    java.nio.file.Files.copy( java.net.URI.create( args[0] ).toURL().openStream(), java.nio.file.Paths.get( args[1] ).toAbsolutePath().normalize() );
+		  }
+		}
+		END
+    # For Cygwin/MinGW, switch paths to Windows format before running javac and java
+    verbose " - Compiling JdkDownloader.java ..."
+    "$(native_path "$JAVACCMD")" "$(native_path "$javaSource")" || die "Failed to compile JdkDownloader.java"
+    verbose " - Running JdkDownloader.java ..."
+    "$(native_path "$JAVACMD")" -cp "$(native_path "$jdk_tmp_dir")" JdkDownloader "$url" "$(native_path "$jdk_file")" || die "Failed to download JDK with Java"
   else
-    # Fallback to authenticated download with Java (keep existing logic)
-    die "Authenticated JDK download not yet supported - use MVNW_SKIP_JDK=true"
+    die "Cannot download JDK: no HTTP client available and Java not found"
   fi
 
   # Verify checksum if provided
