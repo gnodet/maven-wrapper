@@ -117,6 +117,7 @@ retry_http_request() {
   attempt=1
   while [ $attempt -le $max_attempts ]; do
     if command -v curl >/dev/null; then
+      # Use curl with status code capture
       temp_response="$(mktemp)"
       http_status="$(curl -s -w "%{http_code}" -o "$temp_response" "$url" 2>/dev/null)"
 
@@ -136,17 +137,53 @@ retry_http_request() {
         return 1
       fi
       rm -f "$temp_response" 2>/dev/null || true
-    else
-      # Fallback to basic retry without status code detection
-      if wget -q -O - "$url" 2>/dev/null; then
+    elif command -v wget >/dev/null; then
+      # Use wget with status code extraction from server response
+      temp_response="$(mktemp)"
+      temp_headers="$(mktemp)"
+
+      # wget with server response headers to extract status code
+      if wget --server-response -q -O "$temp_response" "$url" 2>"$temp_headers"; then
+        # Success - return the response
+        cat "$temp_response"
+        rm -f "$temp_response" "$temp_headers" 2>/dev/null || true
+        return 0
+      else
+        # Extract HTTP status code from wget's server response output
+        http_status="$(grep -o 'HTTP/[0-9.]\+ [0-9]\+' "$temp_headers" 2>/dev/null | tail -1 | awk '{print $2}')"
+
+        if [ -n "$http_status" ] && [ "$http_status" -ge 500 ] && [ "$http_status" -lt 600 ] && [ $attempt -lt $max_attempts ]; then
+          # 5xx error, retry with exponential backoff
+          delay=$((base_delay ** attempt))
+          verbose "HTTP $http_status received, retrying in ${delay}s (attempt $attempt/$max_attempts)"
+          sleep $delay
+        else
+          # Non-retryable error or max attempts reached
+          rm -f "$temp_response" "$temp_headers" 2>/dev/null || true
+          if [ -n "$http_status" ]; then
+            echo "HTTP_ERROR:$http_status" >&2
+          else
+            echo "HTTP_ERROR:unknown" >&2
+          fi
+          return 1
+        fi
+        rm -f "$temp_response" "$temp_headers" 2>/dev/null || true
+      fi
+    elif command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
+      # Busybox wget fallback (limited functionality)
+      if busybox wget -q -O - "$url" 2>/dev/null; then
         return 0
       elif [ $attempt -lt $max_attempts ]; then
         delay=$((base_delay ** attempt))
         verbose "Request failed, retrying in ${delay}s (attempt $attempt/$max_attempts)"
         sleep $delay
       else
+        echo "HTTP_ERROR:unknown" >&2
         return 1
       fi
+    else
+      echo "HTTP_ERROR:no_client" >&2
+      return 1
     fi
     attempt=$((attempt + 1))
   done
@@ -264,23 +301,16 @@ resolve_jdk_url() {
 
   verbose "Resolving JDK download URL from Disco API: $_resolve_disco_api_url"
 
-  # Make HTTP request to Disco API with better error handling
+  # Make HTTP request to Disco API with retry logic
   _resolve_http_status=""
-  if command -v curl >/dev/null; then
-    # Use curl with status code capture and retry on 5xx errors
-    _resolve_temp_response="$(mktemp)"
-    _resolve_http_status="$(curl --retry 5 --retry-delay 10 --retry-all-errors -s -w "%{http_code}" -o "$_resolve_temp_response" "$_resolve_disco_api_url" 2>/dev/null)"
-    if [ "$_resolve_http_status" = "200" ]; then
-      _resolve_api_response="$(cat "$_resolve_temp_response")"
-    else
-      _resolve_api_response=""
-      verbose "Disco API returned HTTP status: $_resolve_http_status"
-    fi
-    rm -f "$_resolve_temp_response" 2>/dev/null || true
-  elif command -v wget >/dev/null; then
-    _resolve_api_response="$(wget --tries=5 --waitretry=10 --retry-connrefused -q -O - "$_resolve_disco_api_url" 2>/dev/null)"
-  elif command -v busybox >/dev/null && busybox wget --help >/dev/null 2>&1; then
-    _resolve_api_response="$(busybox wget --tries=5 -q -O - "$_resolve_disco_api_url" 2>/dev/null)"
+  _resolve_api_response="$(retry_http_request "$_resolve_disco_api_url" 3 2 2>/dev/null)"
+  _resolve_retry_result=$?
+
+  if [ $_resolve_retry_result -ne 0 ]; then
+    # Extract HTTP status from stderr if available
+    _resolve_http_status="$(retry_http_request "$_resolve_disco_api_url" 1 1 2>&1 >/dev/null | sed -n 's/HTTP_ERROR://p')"
+    _resolve_api_response=""
+    verbose "Disco API returned HTTP status: $_resolve_http_status"
   else
     echo "ERROR: Cannot resolve JDK URL - no HTTP client available (curl, wget, or busybox wget required)" >&2
     echo "" >&2
@@ -293,10 +323,11 @@ resolve_jdk_url() {
 
   if [ -z "$_resolve_api_response" ]; then
     echo "ERROR: Failed to get JDK package information from Disco API" >&2
-    if [ -n "$_resolve_http_status" ] && [ "$_resolve_http_status" != "200" ]; then
+    if [ -n "$_resolve_http_status" ] && [ "$_resolve_http_status" != "200" ] && [ "$_resolve_http_status" != "unknown" ]; then
       echo "HTTP Status: $_resolve_http_status" >&2
       if [ "$_resolve_http_status" = "503" ]; then
         echo "The Disco API is temporarily unavailable (Service Unavailable)" >&2
+        echo "This is likely a temporary issue with the Foojay Disco API service" >&2
       elif [ "$_resolve_http_status" = "429" ]; then
         echo "Rate limited by Disco API (Too Many Requests)" >&2
       elif [ "$_resolve_http_status" = "404" ]; then
@@ -304,6 +335,8 @@ resolve_jdk_url() {
       else
         echo "Disco API returned error status: $_resolve_http_status" >&2
       fi
+    elif [ "$_resolve_http_status" = "unknown" ]; then
+      echo "Unable to determine HTTP status (network or parsing error)" >&2
     fi
     echo "Version: $_resolved_version, Distribution: $_resolve_distribution" >&2
     echo "Platform: $_resolve_platform $_resolve_architecture" >&2
